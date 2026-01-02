@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Twine Labyrinth</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root {
+  --green: #4cff88;
+  --dark: #0c1f16;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, #103d28, #08140f);
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+/* Screens */
+.screen {
+  display: none;
+  text-align: center;
+}
+
+.screen.active {
+  display: block;
+}
+
+/* Start screen */
+h1 {
+  font-size: 2.4rem;
+  color: var(--green);
+  margin-bottom: 20px;
+}
+
+input {
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  width: 220px;
+  font-size: 1rem;
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+button {
+  padding: 12px 22px;
+  border-radius: 14px;
+  border: none;
+  background: var(--green);
+  color: #002a14;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(76,255,136,0.4);
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+/* Game */
+#game {
+  position: relative;
+}
+
+canvas {
+  background: #06150f;
+  border-radius: 16px;
+  box-shadow: 0 0 30px rgba(76,255,136,0.15);
+}
+
+#timer {
+  margin-top: 10px;
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* Result card */
+.card {
+  background: linear-gradient(180deg, #0f3b27, #07160f);
+  border-radius: 18px;
+  padding: 30px;
+  box-shadow: 0 0 40px rgba(76,255,136,0.25);
+}
+
+.card h2 {
+  color: var(--green);
+  margin-bottom: 10px;
+}
+
+.card p {
+  opacity: 0.9;
+}
+
+.card button {
+  margin: 10px 5px 0;
+}
+</style>
+</head>
+
+<body>
+
+<!-- START -->
+<div id="start" class="screen active">
+  <h1>Twine Labyrinth</h1>
+  <input id="nickname" placeholder="Enter your nickname" maxlength="16">
+  <br>
+  <button onclick="startGame()">Start</button>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen">
+  <canvas id="canvas" width="320" height="320"></canvas>
+  <div id="timer">00.0s</div>
+</div>
+
+<!-- RESULT -->
+<div id="result" class="screen">
+  <div class="card" id="resultCard">
+    <h2>YOU DID IT! 🎉</h2>
+    <p id="resultText"></p>
+    <button onclick="location.reload()">Try again</button>
+    <button onclick="downloadResult()">Share & Download result</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const size = 10;
+const cols = 15;
+const rows = 15;
+
+let maze = [];
+let player = {x: 0, y: 0};
+let end = {x: cols - 1, y: rows - 1};
+
+let startTime;
+let timerInterval;
+let nickname = "";
+
+const playerImg = new Image();
+playerImg.src = "images/player.png";
+
+/* Maze generation (DFS) */
+function generateMaze() {
+  maze = Array.from({length: rows}, () =>
+    Array.from({length: cols}, () => ({
+      v: false,
+      walls: [true,true,true,true]
+    }))
+  );
+
+  function carve(x,y) {
+    maze[y][x].v = true;
+    const dirs = [[0,-1],[1,0],[0,1],[-1,0]].sort(()=>Math.random()-0.5);
+    for (let [dx,dy] of dirs) {
+      const nx = x+dx, ny = y+dy;
+      if (nx>=0 && ny>=0 && nx<cols && ny<rows && !maze[ny][nx].v) {
+        if (dx===1){ maze[y][x].walls[1]=false; maze[ny][nx].walls[3]=false;}
+        if (dx===-1){ maze[y][x].walls[3]=false; maze[ny][nx].walls[1]=false;}
+        if (dy===1){ maze[y][x].walls[2]=false; maze[ny][nx].walls[0]=false;}
+        if (dy===-1){ maze[y][x].walls[0]=false; maze[ny][nx].walls[2]=false;}
+        carve(nx,ny);
+      }
+    }
+  }
+  carve(0,0);
+}
+
+/* Draw */
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  ctx.strokeStyle = "#4cff88";
+  ctx.lineWidth = 2;
+
+  for (let y=0;y<rows;y++){
+    for (let x=0;x<cols;x++){
+      const c = maze[y][x];
+      const px = x*size*2;
+      const py = y*size*2;
+      if (c.walls[0]) line(px,py,px+size*2,py);
+      if (c.walls[1]) line(px+size*2,py,px+size*2,py+size*2);
+      if (c.walls[2]) line(px,py+size*2,px+size*2,py+size*2);
+      if (c.walls[3]) line(px,py,px,py+size*2);
+    }
+  }
+
+  ctx.drawImage(playerImg, player.x*size*2+4, player.y*size*2+4, size*2-8, size*2-8);
+
+  ctx.fillStyle = "#4cff88";
+  ctx.fillRect(end.x*size*2+6,end.y*size*2+6, size*2-12, size*2-12);
+}
+
+function line(x1,y1,x2,y2){
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+}
+
+/* Movement */
+function move(dx,dy){
+  const cell = maze[player.y][player.x];
+  if (dx===0 && dy===-1 && !cell.walls[0]) player.y--;
+  if (dx===1 && dy===0 && !cell.walls[1]) player.x++;
+  if (dx===0 && dy===1 && !cell.walls[2]) player.y++;
+  if (dx===-1 && dy===0 && !cell.walls[3]) player.x--;
+
+  draw();
+  checkWin();
+}
+
+document.addEventListener("keydown", e=>{
+  if(e.key==="ArrowUp"||e.key==="w") move(0,-1);
+  if(e.key==="ArrowRight"||e.key==="d") move(1,0);
+  if(e.key==="ArrowDown"||e.key==="s") move(0,1);
+  if(e.key==="ArrowLeft"||e.key==="a") move(-1,0);
+});
+
+/* Touch */
+let sx, sy;
+canvas.addEventListener("touchstart", e=>{
+  sx = e.touches[0].clientX;
+  sy = e.touches[0].clientY;
+});
+canvas.addEventListener("touchend", e=>{
+  const dx = e.changedTouches[0].clientX - sx;
+  const dy = e.changedTouches[0].clientY - sy;
+  if (Math.abs(dx) > Math.abs(dy))
+    move(dx>0?1:-1,0);
+  else
+    move(0,dy>0?1:-1);
+});
+
+/* Game flow */
+function startGame(){
+  nickname = document.getElementById("nickname").value || "Player";
+  document.getElementById("start").classList.remove("active");
+  document.getElementById("game").classList.add("active");
+
+  generateMaze();
+  player = {x:0,y:0};
+  draw();
+
+  startTime = Date.now();
+  timerInterval = setInterval(()=>{
+    document.getElementById("timer").textContent =
+      ((Date.now()-startTime)/1000).toFixed(1)+"s";
+  },100);
+}
+
+function checkWin(){
+  if(player.x===end.x && player.y===end.y){
+    clearInterval(timerInterval);
+    document.getElementById("game").classList.remove("active");
+    document.getElementById("result").classList.add("active");
+
+    const time = ((Date.now()-startTime)/1000).toFixed(1);
+    document.getElementById("resultText").textContent =
+      `${nickname}, your time: ${time}s`;
+  }
+}
+
+/* Download */
+function downloadResult(){
+  html2canvas(document.getElementById("resultCard")).then(canvas=>{
+    const a = document.createElement("a");
+    a.download = "twine-labyrinth-result.png";
+    a.href = canvas.toDataURL();
+    a.click();
+  });
+}
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+</body>
+</html>
